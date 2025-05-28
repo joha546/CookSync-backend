@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 
 
 const connectDB = require('./config/db');
+const recipeRouts = require('./routes/recipeRoutes');
 
 // connecting to the database.
 dotenv.config();
@@ -21,6 +22,9 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
     res.json({message: 'API is running.'});
 })
+
+// routes.
+app.use('/api/recipes', recipeRouts);
 
 const PORT = process.env.PORT || 8000;
 
