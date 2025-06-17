@@ -4,7 +4,7 @@ exports.createRecipe = async(req, res) => {
     try{
         const {
             title, description, ingredients, instructions, servings,
-            prepTime, cookTime, coolTime, category, tags, nutrition
+            prepTime, cookTime, coolTime, category, tags, nutrition, chefId
         } = req.body;
 
         const totalTime = Number(prepTime) + Number(cookTime) + Number(coolTime);
@@ -22,7 +22,8 @@ exports.createRecipe = async(req, res) => {
             totalTime,
             category,
             tags: JSON.parse(tags),
-            nutrition: JSON.parse(nutrition)
+            nutrition: JSON.parse(nutrition),
+            chefId
         });
 
         await recipe.save();
@@ -36,7 +37,15 @@ exports.createRecipe = async(req, res) => {
 
 // get all recipes
 exports.getAllRecipes = async(req, res) => {
-    const recipes = await Recipe.find().sort({createdAt: -1});
+    const query = {};
+
+    // Filter based on diet preferences
+    if(req.query.diet){
+        query.tags = {$in: [req.params.diet]};   // tags must include the dietary label
+
+    }
+    
+    const recipes = await Recipe.find(query).sort({createdAt: -1});
     res.json(recipes);
 };
 

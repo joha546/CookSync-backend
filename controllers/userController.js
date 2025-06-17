@@ -34,3 +34,42 @@ exports.approveChef = async(req, res) => {
 
     res.json({message: 'Chef approved', user});
 };
+
+// Toggle Favorites.
+exports.toggleFavorite = async(req, res) => {
+    const user = req.user;
+    const recipeId = req.params.recipeId;
+
+    const index = user.favorites.indexOf(recipeId);
+
+    if(index === -1){
+        user.favorites.push(recipeId);
+        await user.save();
+        return res.status(200).json({message: 'Recipe added to favorites'});
+    }
+    else{
+        user.favorites.splice(index, 1);
+        await user.save();
+        return res.status(200).json({ message: 'Recipe removed from favorites' });
+    }
+};
+
+// Get All Favorites.
+exports.getFavorites = async(req, res) => {
+    const user = await User.findById(req.user._id).populate('favorites');
+    res.status(200).json(user.favorites);
+};
+
+// Update Dietary Preferences
+exports.updatePreferences = async(req, res) =>{
+  const updates = req.body;
+  const user = await User.findById(req.user._id);
+
+  user.preferences ={
+    ...user.preferences,
+    ...updates
+  };
+
+  await user.save();
+  res.status(200).json({ message: 'Preferences updated', preferences: user.preferences });
+};
