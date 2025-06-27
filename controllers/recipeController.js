@@ -27,6 +27,11 @@ exports.createRecipe = async(req, res) => {
         });
 
         await recipe.save();
+
+        // Emit new recipe event.
+        const io = req.app.get('io');
+        io.emit('new-recipe', recipe);
+
         res.status(201).json(recipe);
     }
     catch(error){
