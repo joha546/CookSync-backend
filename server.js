@@ -12,6 +12,8 @@ const recipeRouts = require('./routes/recipeRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const User = require('./models/User');
+const CookingSession = require('./models/CookingSession');
+const cookingRoutes = require('./routes/cookingRoutes');
 
 // In memory map for roomUsers
 const roomUsers = {};
@@ -36,6 +38,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/recipes', recipeRouts);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/cooking', cookingRoutes);
 
 // SetUp Socket.IO Server.
 const server = http.createServer(app);
@@ -118,7 +121,7 @@ io.on('connection', (socket) => {
   });
 
   // Broadcast steps/timer updates in cooking mode
-  socket.on('cooking-step', ({ recipeId, step }) => {
+  socket.on('cooking-step', async({ recipeId, step }) => {
 
     if(socket.user.role !== 'chef'){
         return socket.emit('error', 'Only chefs can broadcast steps');
@@ -126,12 +129,26 @@ io.on('connection', (socket) => {
 
     console.log(`👨‍🍳 ${socket.user.email} broadcasted: ${step} in recipe ${recipeId}`);
 
-
-    socket.to(recipeId).emit('step-update', {
-        step,
-        by: socket.user.email,
-        at: new Date().toISOString()
+    const session = new CookingSession({
+      recipeId,
+      userId: socket.user._id,
+      step
     });
+
+    try{
+      await session.save();
+      console.log(`📥 Step saved: ${step} by ${socket.user.email}`);
+
+      socket.to(recipeId).emit('step-update', {
+          step,
+          by: socket.user.email,
+          at: new Date().toISOString()
+      });
+    }
+    catch(error){
+      console.error('Failed to save step: ', error.message);
+      socket.emit('error', 'Step not saved');
+    }
   });
 
   // Fallback for Postman or clients sending { event, data }
