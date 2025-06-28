@@ -14,6 +14,8 @@ const userRoutes = require('./routes/userRoutes');
 const User = require('./models/User');
 const CookingSession = require('./models/CookingSession');
 const cookingRoutes = require('./routes/cookingRoutes');
+const handleChatEvents = require('./sockets/chat');
+const chatRoutes = require('./routes/chatRoutes');
 
 // In memory map for roomUsers
 const roomUsers = {};
@@ -39,6 +41,7 @@ app.use('/api/recipes', recipeRouts);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/cooking', cookingRoutes);
+app.use('/api/chat', chatRoutes);
 
 // SetUp Socket.IO Server.
 const server = http.createServer(app);
@@ -83,6 +86,10 @@ io.use(async(socket, next) => {
 
 // Socket.IO real-time features
 io.on('connection', (socket) => {
+
+  // handle chat events.
+  handleChatEvents(io, socket);
+
   console.log(`New client connected: ${socket.id}`);
 
     socket.onAny((event, data) => {
