@@ -73,3 +73,18 @@ exports.updatePreferences = async(req, res) =>{
   await user.save();
   res.status(200).json({ message: 'Preferences updated', preferences: user.preferences });
 };
+
+// Profile page.
+exports.ProfilePage = async(req, res) => {
+    try{
+        const user = await User.findById(req.user.id).select('-__v');
+        if(!user){
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(user);
+    }
+    catch(error){
+        res.status(500).json({message: 'Failed to fetch user.'});
+    }
+};
