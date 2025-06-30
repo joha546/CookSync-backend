@@ -16,4 +16,10 @@ router.delete('/:id', requireAuth, requireRole('chef'), recipeController.deleteR
 // Add admin delete route
 router.delete('/admin/:id', requireAuth, requireAdmin, recipeController.deleteRecipe);
 
+// Like, comment, view routes.
+router.post('/:id/like', requireAuth, recipeController.toggleLike);
+router.post('/:id/view', requireAuth, recipeController.addView);
+router.post('/:id/comment', requireAuth, recipeController.addComment);
+router.delete('/:id/comment/:commentId', requireAuth, recipeController.deleteComment);
+
 module.exports = router;
