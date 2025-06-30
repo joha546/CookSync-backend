@@ -1,4 +1,5 @@
 const Recipe = require('../models/Recipe');
+const Notification = require('../models/Notification');
 
 exports.createRecipe = async(req, res) => {
     try{
@@ -97,34 +98,62 @@ exports.deleteRecipe = async (req, res) => {
 // Like, comment, view controllers.
 
 // Toggle Like.
-exports.toggleLike = async(req, res) => {
-    const {id} = req.params;
-    const userId = req.user.id;
+exports.toggleLike = async (req, res) =>{
+  const { id } = req.params;
+  const userId = req.user.id;
 
-    try{
-        const recipe = await Recipe.findById(id);
+  try{
+    const recipe = await Recipe.findById(id).populate('chefId', 'email');
 
-        if(!recipe){
-            return res.status(404).json({ error: 'Recipe not found' });
-        }
-
-        const existing = recipe.likes.find(like => like.userId.toString() === userId);
-
-        if(existing){
-            recipe.likes = recipe.likes.filter(like => like.userId.toString() !== userId);
-
-            await recipe.save();
-            return res.json({message: 'Like removed'});
-        }
-
-        recipe.likes.push({userId});
-        await recipe.save();
-        res.json({message: 'Liked'});
+    if(!recipe){
+      return res.status(404).json({ error: 'Recipe not found' });
     }
-    catch(error){
-        res.status(500).json({ error: 'Failed to toggle like' });
+
+    const existing = recipe.likes.find(like => like.userId.toString() === userId);
+
+    if(existing){
+      recipe.likes = recipe.likes.filter(like => like.userId.toString() !== userId);
+      await recipe.save();
+      return res.json({ message: 'Like removed' });
     }
-}
+
+    recipe.likes.push({ userId });
+    await recipe.save();
+
+    // Send notification to recipe owner (if not liking their own)
+    if(recipe.chefId._id.toString() !== userId){
+
+      const notif = await Notification.create({
+        user: recipe.chefId._id,
+        message: `${req.user.email} liked your recipe "${recipe.title}"`,
+        link: `/recipes/${recipe._id}`,
+        type: 'like'
+      });
+
+      // emit real-time notification if they're connected
+      const io = req.app.get('io');
+      const sockets = await io.fetchSockets();
+
+      sockets.forEach(sock =>{
+        if (sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
+          sock.emit('new-notification',{
+            type: 'like',
+            message: notif.message,
+            link: notif.link,
+            createdAt: notif.createdAt
+          });
+        }
+      });
+    }
+
+    res.json({ message: 'Liked' });
+  }
+  catch (error) {
+    console.error('❌ toggleLike error:', error.message);
+    res.status(500).json({ error: 'Failed to toggle like' });
+  }
+};
+
 
 // Add view.
 exports.addView = async(req, res) => {
@@ -173,9 +202,35 @@ exports.addComment = async(req, res) => {
         recipe.comments.push({userId, text});
         await recipe.save();
 
+        // Notify recipe owner (if not commenting on own recipe)
+        if(recipe.chefId._id.toString() !== userId) {
+            const notif = await Notification.create({
+                user: recipe.chefId._id,
+                message: `${req.user.email} commented on your recipe "${recipe.title}"`,
+                link: `/recipes/${recipe._id}`,
+                type: 'comment'
+            });
+
+            // Real time notification emit
+            const io = req.app.get('io');
+            const sockets = await io.fetchSockets();
+
+            sockets.forEach(sock => {
+                if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()) {
+                    sock.emit('new-notification',{
+                        type: 'comment',
+                        message: notif.message,
+                        link: notif.link,
+                        createdAt: notif.createdAt
+                    });
+                }
+            });
+        }
+
         res.json({message: 'Comment added.'});
     }
     catch(error){
+        console.error('❌ addComment error:', error.message);
         res.status(500).json({ error: 'Failed to add comment' });
     }
 }

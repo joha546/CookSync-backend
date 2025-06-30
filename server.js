@@ -16,6 +16,7 @@ const CookingSession = require('./models/CookingSession');
 const cookingRoutes = require('./routes/cookingRoutes');
 const handleChatEvents = require('./sockets/chat');
 const chatRoutes = require('./routes/chatRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // In memory map for roomUsers
 const roomUsers = {};
@@ -42,6 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/cooking', cookingRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // SetUp Socket.IO Server.
 const server = http.createServer(app);
@@ -74,7 +76,8 @@ io.use(async(socket, next) => {
         }
 
         socket.user = user;    // attach user to socket
-        next();
+ 
+      next();
     }
 
     catch (err) {
