@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema({
     },
     type:{
         type: String,
-        enum: ['like', 'comment', 'mention', 'system', 'chat', 'collaboration'], default: 'system'
+        enum: ['like', 'comment', 'mention', 'system', 'chat', 'collaboration', 'chef-approval'], default: 'system'
     },
     read: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }

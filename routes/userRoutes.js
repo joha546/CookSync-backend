@@ -40,6 +40,28 @@ router.patch('/admin/approve-chef/:userId', requireAuth, requireAdmin, async(req
         user.chefRequest.status = 'approved';
         await user.save();
 
+        const notif = await Notification.create({
+          user: user._id,
+          message: `🎉 Your chef request has been approved!`,
+          link: '/profile',
+          type: 'chef-approval'
+        });
+
+        // Emit real-time notification.
+        const io = req.app.get('io');
+        const sockets = await io.fetchSockets();
+
+        sockets.forEach(sock => {
+          if(sock.user && sock.user._id.toString() === user._id.toString()) {
+            sock.emit('new-notification', {
+              type: 'chef-approval',
+              message: notif.message,
+              link: notif.link,
+              createdAt: notif.createdAt
+            });
+          }
+        })
+
         res.json({message: 'Chef approved successfully'});
     }
     catch(err){
