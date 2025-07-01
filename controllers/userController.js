@@ -25,14 +25,44 @@ exports.listChefRequests = async(req, res) => {
 
 //Approve a chef request(admin)
 exports.approveChef = async(req, res) => {
-    const user = await User.findById(req.params.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    user.role = 'chef';
-    user.chefRequest.status = 'approved';
-    await user.save();
-
-    res.json({message: 'Chef approved', user});
+    try{
+        const user = await User.findById(req.params.userId);
+    
+        if(!user){
+            return res.status(404).json({message: 'User not found'});
+        }
+    
+        user.role = 'chef';
+        user.chefRequest.status = 'approved';
+        await user.save();
+    
+        const notif = await Notification.create({
+            user: user._id,
+            message: `🎉 Your chef request has been approved!`,
+            link: '/profile',
+            type: 'chef-approval'
+        });
+    
+            // Emit real-time notification.
+        const io = req.app.get('io');
+        const sockets = await io.fetchSockets();
+    
+        sockets.forEach(sock => {
+          if(sock.user && sock.user._id.toString() === user._id.toString()) {
+            sock.emit('new-notification', {
+              type: 'chef-approval',
+              message: notif.message,
+              link: notif.link,
+              createdAt: notif.createdAt
+            });
+          }
+        })
+    
+        res.json({message: 'Chef approved successfully'});
+    }
+    catch(err){
+        res.status(500).json({ error: 'Failed to approve chef' });
+    }
 };
 
 // Toggle Favorites.

@@ -17,6 +17,8 @@ const cookingRoutes = require('./routes/cookingRoutes');
 const handleChatEvents = require('./sockets/chat');
 const chatRoutes = require('./routes/chatRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const Recipe = require('./models/Recipe');
+const Notification = require('./models/Notification');
 
 // In memory map for roomUsers
 const roomUsers = {};
@@ -100,22 +102,55 @@ io.on('connection', (socket) => {
     });
 
   // Leave room on disconnect
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`Client disconnected: ${socket.id}`);
 
-    // Clean up user from all rooms
-    for(const [roomId, users] of Object.entries(roomUsers)) {
-        if(users.has(socket.user._id.toString())) {
-            users.delete(socket.user._id.toString());
+    // Loop through all rooms and remove user from each
+    for(const [roomId, users] of Object.entries(roomUsers)){
+      if(users.has(socket.user._id.toString())){
+        users.delete(socket.user._id.toString());
 
-            // Notify others
-            io.to(roomId).emit('room-users', Array.from(users));
+        // Notify remaining users in room
+        io.to(roomId).emit('room-users', Array.from(users));
+
+        // Notify recipe owner if someone left their room
+        try{
+          const recipe = await Recipe.findById(roomId).populate('chefId', 'email');
+
+          if(!recipe || !recipe.chefId) continue;
+
+          // Skip notification if chef is the one who disconnected
+          if(recipe.chefId._id.toString() === socket.user._id.toString()) continue;
+
+          const notif = await Notification.create({
+            user: recipe.chefId._id,
+            message: `${socket.user.email} left your recipe room "${recipe.title}"`,
+            link: `/recipes/${roomId}`,
+            type: 'leave-room'
+          });
+
+          const sockets = await io.fetchSockets();
+          sockets.forEach(sock => {
+            if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
+              sock.emit('new-notification',{
+                type: 'leave-room',
+                message: notif.message,
+                link: notif.link,
+                createdAt: notif.createdAt
+              });
+            }
+          });
+        } 
+        catch (err) {
+          console.error('❌ disconnect notification error:', err.message);
         }
+      }
     }
   });
 
+
   // Join a recipe room for collaborative editing
-  socket.on('join-recipe', (data) =>{
+  socket.on('join-recipe', async(data) =>{
     const recipeId = typeof data === 'object' ? data.recipeId || data : data;
     socket.join(recipeId);
 
@@ -128,6 +163,40 @@ io.on('connection', (socket) => {
     console.log(`🧑‍🍳 User ${socket.user.email} joined room ${recipeId}`);
 
     io.to(recipeId).emit('room-users', Array.from(roomUsers[recipeId]));
+
+    // Notify recipe owner.
+    try{
+      const recipe = await Recipe.findById((recipeId).populate('chefId', 'email'));
+
+      if(!recipe || !recipe.chefId){
+        return;
+      }
+
+      if(recipe.chefId._id.toString() !== socket.user._id.toString()){
+        const notif = await Notification.create({
+          user: recipe.chefId._id,
+          message: `${socket.user.email} joined your recipe room "${recipe.title}"`,
+          link: `/recipes/${recipeId}`,
+          type: 'join-room'
+        });
+
+        // Emit to owner if online.
+        const sockets = await io.fetchSockets();
+        sockets.forEach(sock => {
+          if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()) {
+            sock.emit('new-notification', {
+              type: 'join-room',
+              message: notif.message,
+              link: notif.link,
+              createdAt: notif.createdAt
+            });
+          }
+        });
+      }
+    }
+    catch(error){
+      console.error('❌ join-recipe notification error:', error.message);
+    }
   });
 
   // Broadcast steps/timer updates in cooking mode
