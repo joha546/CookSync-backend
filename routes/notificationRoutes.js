@@ -35,3 +35,5 @@ router.post('/read/:id', requireAuth, async(req, res) => {
         res.status(500).json({error: 'Failed to fetch notifications'});
     }
 })
+
+module.exports = router;

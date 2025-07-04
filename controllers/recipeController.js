@@ -3,9 +3,13 @@ const Notification = require('../models/Notification');
 
 exports.createRecipe = async(req, res) => {
     try{
+        //Only a chef can post.
+        if(req.user.role !== 'chef'){
+            return res.status(403).json({error: 'Only chefs can create recipes'});
+        }
         const {
             title, description, ingredients, instructions, servings,
-            prepTime, cookTime, coolTime, category, tags, nutrition, chefId
+            prepTime, cookTime, coolTime, category, tags, nutrition
         } = req.body;
 
         const totalTime = Number(prepTime) + Number(cookTime) + Number(coolTime);
@@ -24,7 +28,7 @@ exports.createRecipe = async(req, res) => {
             category,
             tags: JSON.parse(tags),
             nutrition: JSON.parse(nutrition),
-            chefId
+            chefId: req.user.id    // Always use authenticated userID.
         });
 
         await recipe.save();
@@ -36,7 +40,7 @@ exports.createRecipe = async(req, res) => {
         res.status(201).json(recipe);
     }
     catch(error){
-        // console.error(error);
+        console.error(error);
         res.status(500).json({error: 'Failed to create recipe'})
     }
 };
@@ -121,7 +125,7 @@ exports.toggleLike = async (req, res) =>{
     await recipe.save();
 
     // Send notification to recipe owner (if not liking their own)
-    if(recipe.chefId._id.toString() !== userId){
+    if(recipe.chefId && recipe.chefId._id.toString() !== userId){
 
       const notif = await Notification.create({
         user: recipe.chefId._id,
@@ -135,7 +139,7 @@ exports.toggleLike = async (req, res) =>{
       const sockets = await io.fetchSockets();
 
       sockets.forEach(sock =>{
-        if (sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
+        if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
           sock.emit('new-notification',{
             type: 'like',
             message: notif.message,
