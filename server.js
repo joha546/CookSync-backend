@@ -63,7 +63,14 @@ app.set('io', io);
 // Socket Authentication and authorization.
 io.use(async(socket, next) => {
     
-    const token = socket.handshake.auth?.token;
+    const authHeader = socket.handshake.headers?.authorization;
+
+    // Debuggin only.
+    if(!authHeader || !authHeader.startsWith('Bearer ')){
+        return next(new Error('Authentication error: Token missing or malformed'));
+    }
+
+    const token = authHeader.split(' ')[1]; // Extract the token
 
     if(!token){
         return next(new Error('Authentication error: Token missing'));
@@ -231,16 +238,45 @@ io.on('connection', (socket) => {
   });
 
   // Fallback for Postman or clients sending { event, data }
-  socket.on('message', ({ event, data }) => {
+  socket.on('message', async({ event, data }) => {
     console.log(`📬 Wrapped Event: ${event}`, data);
 
-    if (event === 'join-recipe') {
+    if(event === 'join-recipe'){
       const recipeId = typeof data === 'object' ? data.recipeId || data : data;
       socket.join(recipeId);
       console.log(`🧑‍🍳 Socket ${socket.id} joined room ${recipeId} (via message)`);
     }
 
-    if (event === 'cooking-step') {
+    if(event === 'cooking-step'){
+
+      // Reuse the actual logic
+      if(socket.user.role !== 'chef'){
+        return socket.emit('error', 'Only chefs can broadcast steps');
+      }
+
+      const { recipeId, step } = data;
+
+      try{
+        const session = new CookingSession({
+          recipeId,
+          userId: socket.user._id,
+          step
+        })
+
+        await session.save();
+        console.log(`📥 Step saved (via message): ${step} by ${socket.user.email}`);
+
+        socket.io(recipeId).emit('step-update',{
+          step,
+          by: socket.user.email,
+          at: new Date().toString()
+        });
+      }
+
+      catch(error){
+        console.error('Step save failed via message: ', error.message);
+        socket.emit('error', 'Step not saved');
+      }
       socket.to(data.recipeId).emit('step-update', data.step);
       console.log(`🔥 Step update sent to ${data.recipeId} (via message): ${data.step}`);
     }
