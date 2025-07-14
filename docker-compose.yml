@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cooksync-backend
+    ports:
+      - '5000:5000'
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      # No need for depends_on since we removed the local mongo service
