@@ -180,26 +180,75 @@ describe('Recipe Controller - Additional Functions', () => {
 
   // updateRecipe()
   describe('updateRecipe()', () => {
-    it('should update and return the recipe', async () => {
-      req.params = { id: mockRecipeId.toString() };
-      req.body = { title: 'Updated Title' };
+    it('should return 403 if current user is not recipe owner', async() => {
+      req.user.id = new mongoose.Types.ObjectId().toString();
+      req.params = {id: mockRecipeId.toString()};
+      req.body = {title: 'Hacked TItle'};
 
-      mockingoose(Recipe).toReturn({ _id: mockRecipeId, title: 'Updated Title' }, 'findOneAndUpdate');
+      mockingoose(Recipe).toReturn({
+        _id: mockRecipeId,
+        title: 'Old Title',
+        chefId: new mongoose.Types.ObjectId()
+      }, 'findOne');
+
       await updateRecipe(req, res);
 
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ title: 'Updated Title' }));
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({error: 'Not authorized to update this recipe'});
     });
+
+    it('should update and return the recipe if the user is owner', async() => {
+      req.user.id = mockUserId.toString();
+      req.params = {id: mockRecipeId.toString()};
+      req.body = {title: 'Updated Title'};
+
+      mockingoose(Recipe).toReturn({
+        _id: mockRecipeId,
+        title: 'Old Title',
+        chefId: mockUserId
+      }, 'findOne');
+
+      mockingoose(Recipe).toReturn({
+        _id: mockRecipeId,
+        title: 'Updated Title',
+        chefId: mockUserId
+      }, 'findOneAndUpdate');
+
+      await updateRecipe(req, res);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ title: 'Updated Title' }));
+    })
   });
 
   // deleteRecipe()
   describe('deleteRecipe()', () => {
-    it('should delete the recipe and respond', async () => {
-      req.params = { id: mockRecipeId.toString() };
-      mockingoose(Recipe).toReturn({}, 'findOneAndDelete');
+    it('should return 403 if current user is not recipe owner', async() => {
+      req.user.id = new mongoose.Types.ObjectId().toString();
+      req.params = {id: mockRecipeId.toString()};
+
+      mockingoose(Recipe).toReturn({
+        _id: mockRecipeId,
+        chefId: new mongoose.Types.ObjectId()
+      }, 'findOne');
 
       await deleteRecipe(req, res);
-      expect(res.json).toHaveBeenCalledWith({ message: 'Recipe deleted' });
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({error: 'Not authorized to delete this recipe'});
     });
+
+    it('should delete the recipe if the user is owner', async() => {
+      req.user.id = mockUserId.toString();
+      req.params = {id: mockRecipeId.toString()};
+
+      mockingoose(Recipe).toReturn({
+        _id: mockRecipeId,
+        chefId: mockUserId,
+        deleteOne: jest.fn().mockResolvedValue()
+      }, 'findOne');
+
+      await deleteRecipe(req, res);
+      expect(res.json).toHaveBeenCalledWith({message:  'Recipe deleted'});
+    })
   });
 
   // addView()
