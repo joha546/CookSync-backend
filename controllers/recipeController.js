@@ -88,15 +88,49 @@ exports.getRecipeById = async(req, res) => {
     res.json(recipe);
 };
 
-exports.updateRecipe = async (req, res) => {
-  const recipe = await Recipe.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(recipe);
-};
+exports.updateRecipe = async (req, res) =>{
+    try {
+      const recipe = await Recipe.findById(req.params.id);
+  
+      if(!recipe){
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+  
+      if(recipe.chefId.toString() !== req.user.id){
+        return res.status(403).json({ error: 'Not authorized to update this recipe' });
+      }
+  
+      const updated = await Recipe.findByIdAndUpdate(req.params.id, req.body, { new: true });
 
-exports.deleteRecipe = async (req, res) => {
-  await Recipe.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Recipe deleted' });
-};
+      res.json(updated);
+    } 
+    catch(error){
+      res.status(500).json({ error: 'Failed to update recipe' });
+    }
+  };
+  
+
+  exports.deleteRecipe = async (req, res) => {
+    try{
+      const recipe = await Recipe.findById(req.params.id);
+  
+      if(!recipe){
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+  
+      if(recipe.chefId.toString() !== req.user.id){
+        return res.status(403).json({ error: 'Not authorized to delete this recipe' });
+      }
+  
+      await recipe.deleteOne();
+
+      res.json({ message: 'Recipe deleted' });
+    }
+    catch(error){
+      res.status(500).json({ error: 'Failed to delete recipe' });
+    }
+  };
+  
 
 
 // Like, comment, view controllers.
