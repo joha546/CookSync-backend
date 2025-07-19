@@ -124,29 +124,46 @@ io.on('connection', (socket) => {
         try{
           const recipe = await Recipe.findById(roomId).populate('chefId', 'email');
 
-          if(!recipe || !recipe.chefId) continue;
+          if(!recipe || !recipe.chefId) 
+            continue;
 
           // Skip notification if chef is the one who disconnected
-          if(recipe.chefId._id.toString() === socket.user._id.toString()) continue;
+          const isChef = recipe.chefId._id.toString() === socket.user._id.toString();
 
-          const notif = await Notification.create({
-            user: recipe.chefId._id,
-            message: `${socket.user.email} left your recipe room "${recipe.title}"`,
-            link: `/recipes/${roomId}`,
-            type: 'leave-room'
-          });
+          if(isChef){
+            recipe.activeSession = false;
+            await recipe.save();
 
-          const sockets = await io.fetchSockets();
-          sockets.forEach(sock => {
-            if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
-              sock.emit('new-notification',{
-                type: 'leave-room',
-                message: notif.message,
-                link: notif.link,
-                createdAt: notif.createdAt
-              });
-            }
-          });
+            // Notify users that session has ended.
+            io.to(roomId).emit('session-ended', {
+              message: `Chef ${socket.user.email} has ended the session`,
+              roomId
+            });
+
+            console.log(`Session ended by disconnect: ${recipe.title}`);
+          }
+
+          else{
+            // Notify chef that a user left.
+            const notif = await Notification.create({
+              user: recipe.chefId._id,
+              message: `${socket.user.email} left your recipe room "${recipe.title}"`,
+              link: `/recipes/${roomId}`,
+              type: 'leave-room'
+            });
+
+            const sockets = await io.fetchSockets();
+            sockets.forEach(sock => {
+              if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
+                sock.emit('new-notification',{
+                  type: 'leave-room',
+                  message: notif.message,
+                  link: notif.link,
+                  createdAt: notif.createdAt
+                });
+              }
+            });
+          }
         } 
         catch (err) {
           console.error('❌ disconnect notification error:', err.message);
@@ -171,12 +188,17 @@ io.on('connection', (socket) => {
 
     io.to(recipeId).emit('room-users', Array.from(roomUsers[recipeId]));
 
-    // Notify recipe owner.
+    // Notify recipe owner/Chef.
     try{
-      const recipe = await Recipe.findById((recipeId).populate('chefId', 'email'));
+      const recipe = await Recipe.findById(recipeId)
+        .populate('chefId', 'email');
 
       if(!recipe || !recipe.chefId){
         return;
+      }
+
+      if(!recipe.activeSession){
+        return socket.emit('error', 'Session is not active');
       }
 
       if(recipe.chefId._id.toString() !== socket.user._id.toString()){
@@ -236,6 +258,29 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Step not saved');
     }
   });
+
+  
+  // cooking timer.
+  socket.on('cooking-timer', ({recipeId, duration}) => {
+    if(socket.user.role !== 'chef'){
+      return socket.emit('error', 'Only chefs can start timers');
+    }
+
+    if(!duration || isNaN(duration)){
+      return socket.emit('error', 'Invalid timer duration');
+    }
+
+    const endTime = Date.now() + duration*1000;
+
+    // Notify all participants with countdown.
+    io.to(recipeId),emit('timer-start', {
+      duration,
+      endAt: new Date(endTime).toString(),
+      by: socket.user.email
+    });
+
+    console.log(`Time started by ${socket.user.email} for ${duration} in ${recipeId}`);
+  })
 
   // Fallback for Postman or clients sending { event, data }
   socket.on('message', async({ event, data }) => {

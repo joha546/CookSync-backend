@@ -22,4 +22,9 @@ router.post('/:id/view', requireAuth, recipeController.addView);
 router.post('/:id/comment', requireAuth, recipeController.addComment);
 router.delete('/:id/comment/:commentId', requireAuth, recipeController.deleteComment);
 
+// GET /api/recipes/active-sessions
+router.get('/active-sessions', recipeController.getActiveSessions);
+
+router.post('/:id/end-session', requireAuth, requireRole('chef'), recipeController.endSession);
+
 module.exports = router;

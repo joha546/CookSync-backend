@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../middlewares/requireAuth');
+const {startSession} = require('../controllers/sessionController');
 const CookingSession = require('../models/CookingSession');
 
 // Get all steps for a recipe
@@ -22,5 +23,8 @@ router.get('/:recipeId', requireAuth, async(req, res) =>{
     res.status(500).json({ error: 'Failed to fetch cooking steps' });
   }
 });
+
+// POST /api/cooking/:id/start-session
+router.post('/:id/start-session', requireAuth, startSession);
 
 module.exports = router;

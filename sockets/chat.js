@@ -32,7 +32,7 @@ module.exports = function handleChatEvents(io, socket){
             const mentions = message.match(/@([a-zA-Z0-9._-]+)/g);
 
             if(mentions){
-                const usernames = mentions.map(m => m.subString(1).toLowerCase(1));
+                const usernames = mentions.map(m => m.subString(1).toLowerCase());
 
                 const mentionedUsers = await User.find({
                     email: {$in: usernames.map(name => `${name}@cookysync.com`)}

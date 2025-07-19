@@ -59,7 +59,15 @@ const recipeSchema = new mongoose.Schema({
             text: String,
             createdAt: {type: Date, default: Date.now}
         }
-    ]
+    ],
+    activeSession:{
+        type: Boolean,
+        default: false
+    },
+    sessionStartedAt:{
+        type: Date,
+        default: null
+    }
 },
 {
     timestamps: true

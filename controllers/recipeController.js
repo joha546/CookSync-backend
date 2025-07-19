@@ -303,4 +303,46 @@ exports.deleteComment = async(req, res) => {
     catch(error){
         res.status(500).json({ error: 'Failed to add comment' });
     }
+};
+
+exports.getActiveSessions = async(req, res) =>{
+    try{
+        const sessions = await Recipe.find({activeSession: true})
+            .select('title chefId activeSession')
+            .populate('chefId', 'email');
+
+        res.json(sessions);
+    }
+    catch(error){
+        res.status(500).json({error: 'Failed to fetch active sessions'});
+    }
+}
+
+exports.endSession = async(req, res) => {
+    try{
+        const recipe = await Recipe.findById(req.params.id);
+
+        if(!recipe){
+            return res.status(404).json({message: 'Recipe not found'});
+        }
+
+        if(recipe.chefId.toString() !== req.user._id.toString){
+            return res.status(403).json({message: 'Only the chef can end the session'});
+        }
+
+        recipe.activeSession = false;
+        await recipe.save();
+
+        // Emit session end if users are online.
+        req.app.get('io').to(recipe._id.toString()).emit('session-ended', {
+            message: `Chef ${req.user.email} ended the session`,
+            roomId: recipe._id
+        });
+
+        res.json({message: 'Session ended successfully'})
+    }
+    catch(error){
+        console.error('End session error: ', err.message);
+        res.status(500).json({message: 'Server error'});
+    }
 }
