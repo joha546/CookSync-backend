@@ -1,18 +1,30 @@
-const Recipe = require('../models/Recipe');
-const Notification = require('../models/Notification');
+const Recipe = require("../models/Recipe");
+const Notification = require("../models/Notification");
 
-exports.createRecipe = async(req, res) => {
-    try{
+exports.createRecipe = async (req, res) => {
+    try {
         //Only a chef can post.
-        if(req.user.role !== 'chef'){
-            return res.status(403).json({error: 'Only chefs can create recipes'});
+        if (req.user.role !== "chef") {
+            return res
+                .status(403)
+                .json({ error: "Only chefs can create recipes" });
         }
         const {
-            title, description, ingredients, instructions, servings,
-            prepTime, cookTime, coolTime, category, tags, nutrition
+            title,
+            description,
+            ingredients,
+            instructions,
+            servings,
+            prepTime,
+            cookTime,
+            coolTime,
+            category,
+            tags,
+            nutrition,
         } = req.body;
 
-        const totalTime = Number(prepTime) + Number(cookTime) + Number(coolTime);
+        const totalTime =
+            Number(prepTime) + Number(cookTime) + Number(coolTime);
 
         const recipe = new Recipe({
             title,
@@ -28,321 +40,345 @@ exports.createRecipe = async(req, res) => {
             category,
             tags: JSON.parse(tags),
             nutrition: JSON.parse(nutrition),
-            chefId: req.user.id    // Always use authenticated userID.
+            chefId: req.user.id, // Always use authenticated userID.
         });
 
         await recipe.save();
 
         // Emit new recipe event.
-        const io = req.app.get('io');
-        io.emit('new-recipe', recipe);
+        const io = req.app.get("io");
+        io.emit("new-recipe", recipe);
 
         res.status(201).json(recipe);
-    }
-    catch(error){
+    } catch (error) {
         console.error(error);
-        res.status(500).json({error: 'Failed to create recipe'})
+        res.status(500).json({ error: "Failed to create recipe" });
     }
 };
 
 // get all recipes
-exports.getAllRecipes = async(req, res) => {
-    const {diet, sortBy = 'new', page = 1, limit = 10} = req.query;
+exports.getAllRecipes = async (req, res) => {
+    const { diet, sortBy = "new", page = 1, limit = 10 } = req.query;
     const query = {};
 
     // Filter based on diet preferences
-    if(diet){
-        query.tags = {$in: [diet]};   // tags must include the dietary label
-    }
-    
-    let sortOption = {createdAt: -1}  // default: newest.
-    
-    if(sortBy==='likes'){
-        sortOption = {'likes.length': -1};
+    if (diet) {
+        query.tags = { $in: [diet] }; // tags must include the dietary label
     }
 
-    if(sortBy==='views'){
-        sortOption = {'views.length': -1};
+    let sortOption = { createdAt: -1 }; // default: newest.
+
+    if (sortBy === "likes") {
+        sortOption = { "likes.length": -1 };
     }
 
-    try{
+    if (sortBy === "views") {
+        sortOption = { "views.length": -1 };
+    }
+
+    try {
         const recipes = await Recipe.find(query)
             .sort(sortOption)
-            .skip((page-1) * limit)
+            .skip((page - 1) * limit)
             .limit(parseInt(limit))
-            .populate('likes.userId', 'email')
-            .populate('comments.userId', 'email');
-        
+            .populate("likes.userId", "email")
+            .populate("comments.userId", "email");
+
         res.json(recipes);
-    }
-    catch(error){
-        res.status(500).json({error: 'Failed to fetch recipes.'})
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch recipes." });
     }
 };
 
-exports.getRecipeById = async(req, res) => {
+exports.getRecipeById = async (req, res) => {
     const recipe = await Recipe.findById(req.params.id);
-    if(!recipe){
-        return res.status(404).json({ error: 'Recipe not found'});
+    if (!recipe) {
+        return res.status(404).json({ error: "Recipe not found" });
     }
     res.json(recipe);
 };
 
-exports.updateRecipe = async (req, res) =>{
+exports.updateRecipe = async (req, res) => {
     try {
-      const recipe = await Recipe.findById(req.params.id);
-  
-      if(!recipe){
-        return res.status(404).json({ error: 'Recipe not found' });
-      }
-  
-      if(recipe.chefId.toString() !== req.user.id){
-        return res.status(403).json({ error: 'Not authorized to update this recipe' });
-      }
-  
-      const updated = await Recipe.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const recipe = await Recipe.findById(req.params.id);
 
-      res.json(updated);
-    } 
-    catch(error){
-      res.status(500).json({ error: 'Failed to update recipe' });
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
+        }
+
+        if (recipe.chefId.toString() !== req.user.id) {
+            return res
+                .status(403)
+                .json({ error: "Not authorized to update this recipe" });
+        }
+
+        const updated = await Recipe.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true }
+        );
+
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to update recipe" });
     }
-  };
-  
+};
 
-  exports.deleteRecipe = async (req, res) => {
-    try{
-      const recipe = await Recipe.findById(req.params.id);
-  
-      if(!recipe){
-        return res.status(404).json({ error: 'Recipe not found' });
-      }
-  
-      if(recipe.chefId.toString() !== req.user.id){
-        return res.status(403).json({ error: 'Not authorized to delete this recipe' });
-      }
-  
-      await recipe.deleteOne();
+exports.deleteRecipe = async (req, res) => {
+    try {
+        const recipe = await Recipe.findById(req.params.id);
 
-      res.json({ message: 'Recipe deleted' });
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
+        }
+
+        if (recipe.chefId.toString() !== req.user.id) {
+            return res
+                .status(403)
+                .json({ error: "Not authorized to delete this recipe" });
+        }
+
+        await recipe.deleteOne();
+
+        res.json({ message: "Recipe deleted" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to delete recipe" });
     }
-    catch(error){
-      res.status(500).json({ error: 'Failed to delete recipe' });
-    }
-  };
-  
-
+};
 
 // Like, comment, view controllers.
 
 // Toggle Like.
-exports.toggleLike = async (req, res) =>{
-  const { id } = req.params;
-  const userId = req.user.id;
-
-  try{
-    const recipe = await Recipe.findById(id).populate('chefId', 'email');
-
-    if(!recipe){
-      return res.status(404).json({ error: 'Recipe not found' });
-    }
-
-    const existing = recipe.likes.find(like => like.userId.toString() === userId);
-
-    if(existing){
-      recipe.likes = recipe.likes.filter(like => like.userId.toString() !== userId);
-      await recipe.save();
-      return res.json({ message: 'Like removed' });
-    }
-
-    recipe.likes.push({ userId });
-    await recipe.save();
-
-    // Send notification to recipe owner (if not liking their own)
-    if(recipe.chefId && recipe.chefId._id.toString() !== userId){
-
-      const notif = await Notification.create({
-        user: recipe.chefId._id,
-        message: `${req.user.email} liked your recipe "${recipe.title}"`,
-        link: `/recipes/${recipe._id}`,
-        type: 'like'
-      });
-
-      // emit real-time notification if they're connected
-      const io = req.app.get('io');
-      const sockets = await io.fetchSockets();
-
-      sockets.forEach(sock =>{
-        if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()){
-          sock.emit('new-notification',{
-            type: 'like',
-            message: notif.message,
-            link: notif.link,
-            createdAt: notif.createdAt
-          });
-        }
-      });
-    }
-
-    res.json({ message: 'Liked' });
-  }
-  catch (error) {
-    console.error('❌ toggleLike error:', error.message);
-    res.status(500).json({ error: 'Failed to toggle like' });
-  }
-};
-
-
-// Add view.
-exports.addView = async(req, res) => {
-    const {id} = req.params;
+exports.toggleLike = async (req, res) => {
+    const { id } = req.params;
     const userId = req.user.id;
 
-    try{
-        const recipe = await Recipe.findById(id);
+    try {
+        const recipe = await Recipe.findById(id).populate("chefId", "email");
 
-        if(!recipe){
-            return res.status(404).json({ error: 'Recipe not found' });
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
         }
 
-        const alreadyViewed = recipe.views.find(view => view.userId.toString() === userId);
+        const existing = recipe.likes.find(
+            (like) => like.userId.toString() === userId
+        );
 
-        if(!alreadyViewed){
-            recipe.views.push({userId});
+        if (existing) {
+            recipe.likes = recipe.likes.filter(
+                (like) => like.userId.toString() !== userId
+            );
             await recipe.save();
+            return res.json({ message: "Like removed" });
         }
 
-        res.json({ message: 'View recorded' });
-    }
-    catch(error){
-        res.status(500).json({ error: 'Failed to record view' });
-    }
-}
-
-
-// Add comment.
-exports.addComment = async(req, res) => {
-    const {id} = req.params;
-    const {text} = req.body;
-    const {userId} = req.user.id;
-
-    if(!text){
-        return res.status(400).json({error: 'Comment text is required'});
-    }
-
-    try{
-        const recipe = await Recipe.findById(id);
-
-         if(!recipe){
-            return res.status(404).json({ error: 'Recipe not found' });
-        }
-
-        recipe.comments.push({userId, text});
+        recipe.likes.push({ userId });
         await recipe.save();
 
-        // Notify recipe owner (if not commenting on own recipe)
-        if(recipe.chefId._id.toString() !== userId) {
+        // Send notification to recipe owner (if not liking their own)
+        if (recipe.chefId && recipe.chefId._id.toString() !== userId) {
             const notif = await Notification.create({
                 user: recipe.chefId._id,
-                message: `${req.user.email} commented on your recipe "${recipe.title}"`,
+                message: `${req.user.email} liked your recipe "${recipe.title}"`,
                 link: `/recipes/${recipe._id}`,
-                type: 'comment'
+                type: "like",
             });
 
-            // Real time notification emit
-            const io = req.app.get('io');
+            // emit real-time notification if they're connected
+            const io = req.app.get("io");
             const sockets = await io.fetchSockets();
 
-            sockets.forEach(sock => {
-                if(sock.user && sock.user._id.toString() === recipe.chefId._id.toString()) {
-                    sock.emit('new-notification',{
-                        type: 'comment',
+            sockets.forEach((sock) => {
+                if (
+                    sock.user &&
+                    sock.user._id.toString() === recipe.chefId._id.toString()
+                ) {
+                    sock.emit("new-notification", {
+                        type: "like",
                         message: notif.message,
                         link: notif.link,
-                        createdAt: notif.createdAt
+                        createdAt: notif.createdAt,
                     });
                 }
             });
         }
 
-        res.json({message: 'Comment added.'});
+        res.json({ message: "Liked" });
+    } catch (error) {
+        console.error("❌ toggleLike error:", error.message);
+        res.status(500).json({ error: "Failed to toggle like" });
     }
-    catch(error){
-        console.error('❌ addComment error:', error.message);
-        res.status(500).json({ error: 'Failed to add comment' });
-    }
-}
+};
 
-
-// Delete comment.
-exports.deleteComment = async(req, res) => {
-    const {id, commentId} = req.params;
+// Add view.
+exports.addView = async (req, res) => {
+    const { id } = req.params;
     const userId = req.user.id;
 
-    try{
+    try {
         const recipe = await Recipe.findById(id);
 
-        if(!recipe){
-            return res.status(404).json({ error: 'Recipe not found' });
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
+        }
+
+        const alreadyViewed = recipe.views.find(
+            (view) => view.userId.toString() === userId
+        );
+
+        if (!alreadyViewed) {
+            recipe.views.push({ userId });
+            await recipe.save();
+        }
+
+        res.json({ message: "View recorded" });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to record view" });
+    }
+};
+
+// Add comment.
+exports.addComment = async (req, res) => {
+    const { id } = req.params;
+    const { text } = req.body;
+    const { userId } = req.user.id;
+
+    if (!text) {
+        return res.status(400).json({ error: "Comment text is required" });
+    }
+
+    try {
+        const recipe = await Recipe.findById(id);
+
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
+        }
+
+        recipe.comments.push({ userId, text });
+        await recipe.save();
+
+        // Notify recipe owner (if not commenting on own recipe)
+        if (recipe.chefId._id.toString() !== userId) {
+            const notif = await Notification.create({
+                user: recipe.chefId._id,
+                message: `${req.user.email} commented on your recipe "${recipe.title}"`,
+                link: `/recipes/${recipe._id}`,
+                type: "comment",
+            });
+
+            // Real time notification emit
+            const io = req.app.get("io");
+            const sockets = await io.fetchSockets();
+
+            sockets.forEach((sock) => {
+                if (
+                    sock.user &&
+                    sock.user._id.toString() === recipe.chefId._id.toString()
+                ) {
+                    sock.emit("new-notification", {
+                        type: "comment",
+                        message: notif.message,
+                        link: notif.link,
+                        createdAt: notif.createdAt,
+                    });
+                }
+            });
+        }
+
+        res.json({ message: "Comment added." });
+    } catch (error) {
+        console.error("❌ addComment error:", error.message);
+        res.status(500).json({ error: "Failed to add comment" });
+    }
+};
+
+// Delete comment.
+exports.deleteComment = async (req, res) => {
+    const { id, commentId } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const recipe = await Recipe.findById(id);
+
+        if (!recipe) {
+            return res.status(404).json({ error: "Recipe not found" });
         }
 
         const comment = recipe.comments.id(commentId);
 
-        if(!comment){
-            return res.status(404).json({ error: 'Comment not found' });
+        if (!comment) {
+            return res.status(404).json({ error: "Comment not found" });
         }
 
-        if(comment.userId.toString() !== userId){
-            return res.status(403).json({error: 'Not authorized to delte this comment.'});
+        if (comment.userId.toString() !== userId) {
+            return res
+                .status(403)
+                .json({ error: "Not authorized to delte this comment." });
         }
 
         comment.remove();
         await recipe.save();
-        res.json({message: 'Comment deleted.'});
-    }
-    catch(error){
-        res.status(500).json({ error: 'Failed to add comment' });
+        res.json({ message: "Comment deleted." });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to add comment" });
     }
 };
 
-exports.getActiveSessions = async(req, res) =>{
-    try{
-        const sessions = await Recipe.find({activeSession: true})
-            .select('title chefId activeSession')
-            .populate('chefId', 'email');
+exports.getActiveSessions = async (req, res) => {
+    try {
+        const sessions = await Recipe.find({ activeSession: true })
+            .select("title chefId activeSession")
+            .populate("chefId", "email");
 
         res.json(sessions);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch active sessions" });
     }
-    catch(error){
-        res.status(500).json({error: 'Failed to fetch active sessions'});
-    }
-}
+};
 
-exports.endSession = async(req, res) => {
-    try{
+exports.endSession = async (req, res) => {
+    try {
         const recipe = await Recipe.findById(req.params.id);
 
-        if(!recipe){
-            return res.status(404).json({message: 'Recipe not found'});
+        if (!recipe) {
+            return res.status(404).json({ message: "Recipe not found" });
         }
 
-        if(recipe.chefId.toString() !== req.user._id.toString){
-            return res.status(403).json({message: 'Only the chef can end the session'});
+        if (recipe.chefId.toString() !== req.user._id.toString) {
+            return res
+                .status(403)
+                .json({ message: "Only the chef can end the session" });
         }
 
         recipe.activeSession = false;
         await recipe.save();
 
         // Emit session end if users are online.
-        req.app.get('io').to(recipe._id.toString()).emit('session-ended', {
-            message: `Chef ${req.user.email} ended the session`,
-            roomId: recipe._id
-        });
+        req.app
+            .get("io")
+            .to(recipe._id.toString())
+            .emit("session-ended", {
+                message: `Chef ${req.user.email} ended the session`,
+                roomId: recipe._id,
+            });
 
-        res.json({message: 'Session ended successfully'})
+        res.json({ message: "Session ended successfully" });
+    } catch (error) {
+        console.error("End session error: ", err.message);
+        res.status(500).json({ message: "Server error" });
     }
-    catch(error){
-        console.error('End session error: ', err.message);
-        res.status(500).json({message: 'Server error'});
+};
+
+exports.getRecipesByChef = async (req, res) => {
+    try {
+        const recipes = await Recipe.find({ chefId: req.user.id })
+            .select("-__v -createdAt -updatedAt")
+            .populate("likes.userId", "email")
+            .populate("comments.userId", "email");
+
+        res.json(recipes);
+    } catch (error) {
+        console.error("❌ getRecipesByChef error:", error.message);
+        res.status(500).json({ error: "Failed to fetch recipes" });
     }
-}
+};
