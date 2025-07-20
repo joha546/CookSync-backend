@@ -1,14 +1,14 @@
-const nodemailer = require('nodemailer');
-const dotenv = require('dotenv');
+const nodemailer = require("nodemailer");
+const dotenv = require("dotenv");
 
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: "gmail",
     auth: {
         user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS
-    }
+        pass: process.env.MAIL_PASS,
+    },
 });
 
 exports.sendOTP = async (email, otp) => {
@@ -32,9 +32,9 @@ exports.sendOTP = async (email, otp) => {
     `;
 
     await transporter.sendMail({
-        from: "CookSync 🔥" <${process.env.MAIL_USER}>,
+        from: `"CookSync 🔥" <${process.env.MAIL_USER}>`,
         to: email,
         subject: "Your CookSync OTP Code",
-        html: htmlTemplate
+        html: htmlTemplate,
     });
 };
