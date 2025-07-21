@@ -33,7 +33,7 @@ router.delete(
     "/admin/:id",
     requireAuth,
     requireAdmin,
-    recipeController.deleteRecipe
+    recipeController.deleteRecipeByAdmin
 );
 
 // Like, comment, view routes.

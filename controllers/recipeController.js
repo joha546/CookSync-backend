@@ -146,6 +146,23 @@ exports.deleteRecipe = async (req, res) => {
     }
 };
 
+exports.deleteRecipeByAdmin = async (req, res) => {
+    try{
+        const recipe = await Recipe.findById(req.params.id);
+
+        if(!recipe){
+            return res.status(404).json({ error: "Recipe not found" });
+        }
+
+        await recipe.deleteOne();
+
+        res.json({ message: "Recipe deleted" });
+    } 
+    catch (error){
+        res.status(500).json({ error: "Failed to delete recipe" });
+    }
+};
+
 // Like, comment, view controllers.
 
 // Toggle Like.
