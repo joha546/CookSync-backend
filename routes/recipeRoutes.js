@@ -14,6 +14,10 @@ router.post(
     recipeController.createRecipe
 );
 router.get("/", recipeController.getAllRecipes);
+
+// GET /api/recipes/active-sessions
+router.get("/active-sessions", recipeController.getActiveSessions);
+
 router.get("/:id", recipeController.getRecipeById);
 router.put(
     "/:id",
@@ -55,8 +59,6 @@ router.get(
     recipeController.getRecipesByChef
 );
 
-// GET /api/recipes/active-sessions
-router.get("/active-sessions", recipeController.getActiveSessions);
 
 router.post(
     "/:id/end-session",
