@@ -147,18 +147,17 @@ exports.deleteRecipe = async (req, res) => {
 };
 
 exports.deleteRecipeByAdmin = async (req, res) => {
-    try{
+    try {
         const recipe = await Recipe.findById(req.params.id);
 
-        if(!recipe){
+        if (!recipe) {
             return res.status(404).json({ error: "Recipe not found" });
         }
 
         await recipe.deleteOne();
 
         res.json({ message: "Recipe deleted" });
-    } 
-    catch (error){
+    } catch (error) {
         res.status(500).json({ error: "Failed to delete recipe" });
     }
 };
@@ -356,12 +355,13 @@ exports.getActiveSessions = async (req, res) => {
 exports.endSession = async (req, res) => {
     try {
         const recipe = await Recipe.findById(req.params.id);
+        const userId = req.user.id;
 
         if (!recipe) {
             return res.status(404).json({ message: "Recipe not found" });
         }
 
-        if (recipe.chefId.toString() !== req.user._id.toString) {
+        if (recipe.chefId.toString() !== userId.toString()) {
             return res
                 .status(403)
                 .json({ message: "Only the chef can end the session" });
@@ -381,7 +381,7 @@ exports.endSession = async (req, res) => {
 
         res.json({ message: "Session ended successfully" });
     } catch (error) {
-        console.error("End session error: ", err.message);
+        console.error("End session error: ", error.message);
         res.status(500).json({ message: "Server error" });
     }
 };

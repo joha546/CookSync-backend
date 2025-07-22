@@ -59,7 +59,6 @@ router.get(
     recipeController.getRecipesByChef
 );
 
-
 router.post(
     "/:id/end-session",
     requireAuth,
