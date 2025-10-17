@@ -6,7 +6,7 @@ This backend is developed with **Node.js**, **Express**, **MongoDB (Atlas)**, an
 
 ---
 
-## ⚙️ Tech Stack
+## Tech Stack
 
 - **Node.js + Express** – Web framework
 - **MongoDB + Mongoose** – Database & ORM
@@ -18,32 +18,32 @@ This backend is developed with **Node.js**, **Express**, **MongoDB (Atlas)**, an
 
 ---
 
-## 🚀 Features Implemented (Backend)
+## Features Implemented (Backend)
 
-### 🔐 Authentication
+### Authentication
 - Passwordless email OTP login
 - JWT generation and protected routes
 
-### 👤 Users
+### Users
 - Role-based system: `user`, `chef`, `admin`
 - Dietary preferences
 - Favorites and profile management
 - Chef request flow with admin approval
 
-### 🍲 Recipes
+### Recipes
 - Full CRUD (Create, Read, Update, Delete)
 - Image upload via Multer + Cloudinary
 - Like, comment, view tracking
 - Filter by tags or preferences
 
-### 🧑‍🍳 Real-Time Cooking
+### Real-Time Cooking
 - Join recipe room
 - Step-by-step cooking instructions (broadcast)
 - Live chat (Socket.IO)
 - Typing indicators (optional)
 - Cooking session history storage
 
-### 🔔 Notifications
+### Notifications
 - Events trigger notifications:
   - Likes, comments, mentions
   - Room join/leave
@@ -51,14 +51,14 @@ This backend is developed with **Node.js**, **Express**, **MongoDB (Atlas)**, an
 - Real-time updates via `new-notification` socket event
 - Notification read status
 
-### 🛠️ Admin Panel
+### Admin Panel
 - View all users and their roles
 - Moderate chef requests
 - Delete any recipe
 
 ---
 
-## 🧪 API Collection
+## API Collection
 
 📬 [Postman Collection (Full)](link-to-json-if-public)
 
@@ -72,7 +72,7 @@ Includes:
 
 ---
 
-## 🧠 Real-Time Events
+## Real-Time Events
 
 | Event              | Payload                            | Triggered By            |
 |--------------------|------------------------------------|--------------------------|
@@ -85,25 +85,9 @@ Includes:
 
 ---
 
-## 📁 Folder Structure (Backend)
-
-```
-
-cooksync-backend/
-├── config/             # DB & cloudinary configs
-├── controllers/        # Business logic
-├── models/             # Mongoose schemas
-├── routes/             # Express route handlers
-├── sockets/            # Chat + live step logic
-├── middlewares/        # Auth, role checks
-├── utils/              # Mailer, helpers
-└── server.js           # Entry point + socket init
-
-````
-
 ---
 
-## 🧪 Testing
+## Testing
 
 - REST APIs tested via Postman
 - Real-time events tested via Postman WebSocket
@@ -112,7 +96,7 @@ cooksync-backend/
 
 ---
 
-## 🔐 .env Configuration
+## .env Configuration
 
 ```env
 PORT=5000
@@ -128,7 +112,7 @@ ADMIN_EMAIL=admin@example.com
 
 ---
 
-## 🧑‍💻 Backend Lead
+## Backend Lead
 
 **MD Khaled Bin Joha**
 Backend Engineer – CookSync
@@ -137,7 +121,7 @@ Backend Engineer – CookSync
 
 ---
 
-## ✅ To-Do (Optional / Future)
+## To-Do (Optional / Future)
 
 * WebRTC integration for video calls
 * AI-based recipe recommendations
