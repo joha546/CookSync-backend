@@ -1,4 +1,4 @@
-name: 🔍 Run Tests on Push or PR
+name: Run Tests on Push or PR
 
 on:
   push:
@@ -11,19 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: ⬇️ Checkout Code
+    - name: Checkout Code
       uses: actions/checkout@v3
 
-    - name: ⚙️ Setup Node.js
+    - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
         node-version: 18
 
-    - name: 📦 Install Dependencies
+    - name: Install Dependencies
       run: npm install
 
-    - name: 🧪 Run Unit & Integration Tests
+    - name: Run Unit & Integration Tests
       run: npm test
 
-    - name: ✅ Test Coverage Report (optional)
+    - name: Test Coverage Report (optional)
       run: npx jest --coverage
