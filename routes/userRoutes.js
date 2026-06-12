@@ -3,7 +3,7 @@ const router = express.Router();
 const requireAuth = require('../middlewares/requireAuth');
 const requireAdmin = require('../middlewares/requireAdmin');
 const requireRole = require('../middlewares/requireRole');
-const {requestChef, listChefRequests, approveChef, toggleFavorite, getFavorites, updatePreferences, ProfilePage, Preferences} = require('../controllers/userController');
+const {requestChef, listChefRequests, approveChef, toggleFavorite, getFavorites, updatePreferences, ProfilePage} = require('../controllers/userController');
 const User = require('../models/User');
 
 router.post('/request-chef', requireAuth, requestChef);

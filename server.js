@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 
 const connectDB = require("./config/db");
+const { validateEnv } = require("./config/env");
 const recipeRouts = require("./routes/recipeRoutes");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -24,7 +25,24 @@ const roomUsers = {};
 
 // connecting to the database.
 dotenv.config();
+validateEnv();
 connectDB();
+
+async function broadcastCookingStep(socket, recipeId, step) {
+    const session = new CookingSession({
+        recipeId,
+        userId: socket.user._id,
+        step,
+    });
+
+    await session.save();
+
+    socket.to(recipeId).emit("step-update", {
+        step,
+        by: socket.user.email,
+        at: new Date().toISOString(),
+    });
+}
 
 // creating app instance.
 const app = express();
@@ -249,21 +267,9 @@ io.on("connection", (socket) => {
             `👨‍🍳 ${socket.user.email} broadcasted: ${step} in recipe ${recipeId}`
         );
 
-        const session = new CookingSession({
-            recipeId,
-            userId: socket.user._id,
-            step,
-        });
-
         try {
-            await session.save();
+            await broadcastCookingStep(socket, recipeId, step);
             console.log(`📥 Step saved: ${step} by ${socket.user.email}`);
-
-            socket.to(recipeId).emit("step-update", {
-                step,
-                by: socket.user.email,
-                at: new Date().toISOString(),
-            });
         } catch (error) {
             console.error("Failed to save step: ", error.message);
             socket.emit("error", "Step not saved");
@@ -308,7 +314,6 @@ io.on("connection", (socket) => {
         }
 
         if (event === "cooking-step") {
-            // Reuse the actual logic
             if (socket.user.role !== "chef") {
                 return socket.emit("error", "Only chefs can broadcast steps");
             }
@@ -316,30 +321,14 @@ io.on("connection", (socket) => {
             const { recipeId, step } = data;
 
             try {
-                const session = new CookingSession({
-                    recipeId,
-                    userId: socket.user._id,
-                    step,
-                });
-
-                await session.save();
+                await broadcastCookingStep(socket, recipeId, step);
                 console.log(
-                    `📥 Step saved (via message): ${step} by ${socket.user.email}`
+                    `Step saved (via message): ${step} by ${socket.user.email}`
                 );
-
-                socket.io(recipeId).emit("step-update", {
-                    step,
-                    by: socket.user.email,
-                    at: new Date().toString(),
-                });
             } catch (error) {
                 console.error("Step save failed via message: ", error.message);
                 socket.emit("error", "Step not saved");
             }
-            socket.to(data.recipeId).emit("step-update", data.step);
-            console.log(
-                `🔥 Step update sent to ${data.recipeId} (via message): ${data.step}`
-            );
         }
     });
 });

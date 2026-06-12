@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 
 // Request chef access.
 exports.requestChef = async(req, res) => {
@@ -38,7 +39,7 @@ exports.approveChef = async(req, res) => {
     
         const notif = await Notification.create({
             user: user._id,
-            message: `🎉 Your chef request has been approved!`,
+            message: `Your chef request has been approved!`,
             link: '/profile',
             type: 'chef-approval'
         });

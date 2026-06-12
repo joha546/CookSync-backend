@@ -1,0 +1,694 @@
+{
+  "info": {
+    "_postman_id": "cooksync-api-collection",
+    "name": "CookSync API + Socket.IO",
+    "description": "Full CookSync backend collection (REST + Socket.IO).\n\n## Setup\n1. Import `CookSync-Local.postman_environment.json`\n2. Set `baseUrl` (default `http://localhost:5000` — match your `.env` PORT)\n3. Set `adminEmail` to your `ADMIN_EMAIL` from `.env`\n4. Run **00 Stage 0 Gate** folder in order\n\n## Socket.IO in Postman\n1. New request → **Socket.IO** (not raw WebSocket)\n2. URL: `{{baseUrl}}`\n3. Header: `Authorization: Bearer {{jwt}}` (or chefJwt / adminJwt)\n4. Connect, then emit events listed in the **09 Socket.IO** folder\n5. Postman fallback: emit event `message` with body `{ \"event\": \"cooking-step\", \"data\": { \"recipeId\": \"...\", \"step\": \"...\" } }`\n\nSee `STAGE0_TO_STAGE1_GATE.md` for the readiness checklist.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "jwt", "value": "" },
+    { "key": "chefJwt", "value": "" },
+    { "key": "adminJwt", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "recipeId", "value": "" },
+    { "key": "commentId", "value": "" },
+    { "key": "otp", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 Stage 0 Gate (run in order)",
+      "description": "Run these sequentially after starting the server (`npm run dev`). All should pass before moving to Stage 1 hardening.",
+      "item": [
+        {
+          "name": "G1 - Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('API is running', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().message).to.eql('API is running.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "G2 - Send OTP (user)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/send-otp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('OTP sent', () => pm.response.to.have.status(200));",
+                  "pm.test('Check your email and set {{otp}} in environment', () => true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "G3 - Verify OTP (user) → saves jwt",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"otp\": \"{{otp}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/verify-otp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.test('Login OK', () => pm.response.to.have.status(200));",
+                  "if (res.token) {",
+                  "  pm.environment.set('jwt', res.token);",
+                  "  pm.collectionVariables.set('jwt', res.token);",
+                  "  if (res.user && res.user._id) {",
+                  "    pm.environment.set('userId', res.user._id);",
+                  "    pm.collectionVariables.set('userId', res.user._id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "G4 - Add comment (correctness bug fix)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Stage 0 gate comment\"\n}"
+            },
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/comment"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Comment added (not 500)', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().message).to.eql('Comment added.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "G5 - Sort by likes (aggregation fix)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipes?sortBy=likes&page=1&limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "recipes"],
+              "query": [
+                { "key": "sortBy", "value": "likes" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Recipes sorted endpoint works', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "G6 - Invalid JSON on create returns 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefJwt}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Bad Recipe", "type": "text" },
+                { "key": "ingredients", "value": "not-valid-json", "type": "text" },
+                { "key": "instructions", "value": "[\"step\"]", "type": "text" },
+                { "key": "tags", "value": "[\"test\"]", "type": "text" },
+                { "key": "nutrition", "value": "{\"calories\":100}", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/recipes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Validation error not 500', () => {",
+                  "  pm.response.to.have.status(400);",
+                  "  pm.expect(pm.response.json().error).to.include('ingredients');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Auth",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{userEmail}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/send-otp"
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"otp\": \"{{otp}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/verify-otp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.environment.set('jwt', res.token);",
+                  "  pm.collectionVariables.set('jwt', res.token);",
+                  "  if (res.user && res.user._id) {",
+                  "    pm.environment.set('userId', res.user._id);",
+                  "    pm.collectionVariables.set('userId', res.user._id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"otp\": \"{{otp}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/verify-otp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.environment.set('adminJwt', res.token);",
+                  "  pm.collectionVariables.set('adminJwt', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP (chef)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{chefEmail}}\",\n  \"otp\": \"{{otp}}\"\n}" },
+            "url": "{{baseUrl}}/api/auth/verify-otp"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.token) {",
+                  "  pm.environment.set('chefJwt', res.token);",
+                  "  pm.collectionVariables.set('chefJwt', res.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Users",
+      "item": [
+        {
+          "name": "Get my profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/users/me"
+          }
+        },
+        {
+          "name": "Request chef role",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/users/request-chef"
+          }
+        },
+        {
+          "name": "Update preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"vegan\": true,\n  \"glutenFree\": false\n}" },
+            "url": "{{baseUrl}}/api/users/preferences"
+          }
+        },
+        {
+          "name": "Toggle favorite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/users/favorites/{{recipeId}}"
+          }
+        },
+        {
+          "name": "Get favorites",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/users/favorites"
+          }
+        },
+        {
+          "name": "Admin - list chef requests",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminJwt}}" }],
+            "url": "{{baseUrl}}/api/users/admin/chef-requests"
+          }
+        },
+        {
+          "name": "Admin - approve chef",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminJwt}}" }],
+            "url": "{{baseUrl}}/api/users/admin/approve-chef/{{userId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Chef approved (Notification import fix)', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().message).to.eql('Chef approved successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin - reject chef",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminJwt}}" }],
+            "url": "{{baseUrl}}/api/users/admin/reject-chef/{{userId}}"
+          }
+        },
+        {
+          "name": "Admin - list all users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminJwt}}" }],
+            "url": "{{baseUrl}}/api/users/admin/users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Recipes",
+      "item": [
+        {
+          "name": "List recipes (newest)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes?page=1&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const list = pm.response.json();",
+                  "if (Array.isArray(list) && list.length > 0 && list[0]._id) {",
+                  "  pm.environment.set('recipeId', list[0]._id);",
+                  "  pm.collectionVariables.set('recipeId', list[0]._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List recipes (sortBy=likes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes?sortBy=likes&page=1&limit=10"
+          }
+        },
+        {
+          "name": "List recipes (sortBy=views)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes?sortBy=views&page=1&limit=10"
+          }
+        },
+        {
+          "name": "List active sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes/active-sessions"
+          }
+        },
+        {
+          "name": "Get recipe by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}"
+          }
+        },
+        {
+          "name": "Create recipe (chef, multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Test Pasta", "type": "text" },
+                { "key": "description", "value": "Quick test recipe", "type": "text" },
+                { "key": "ingredients", "value": "[\"pasta\",\"sauce\"]", "type": "text" },
+                { "key": "instructions", "value": "[\"Boil pasta\",\"Add sauce\"]", "type": "text" },
+                { "key": "servings", "value": "2", "type": "text" },
+                { "key": "prepTime", "value": "5", "type": "text" },
+                { "key": "cookTime", "value": "10", "type": "text" },
+                { "key": "coolTime", "value": "0", "type": "text" },
+                { "key": "category", "value": "Italian", "type": "text" },
+                { "key": "tags", "value": "[\"vegetarian\"]", "type": "text" },
+                { "key": "nutrition", "value": "{\"calories\":400,\"fats\":10,\"carbs\":60,\"protein\":12}", "type": "text" },
+                { "key": "image", "type": "file", "src": [], "disabled": true }
+              ]
+            },
+            "url": "{{baseUrl}}/api/recipes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res._id) {",
+                  "  pm.environment.set('recipeId', res._id);",
+                  "  pm.collectionVariables.set('recipeId', res._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update recipe",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefJwt}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Updated Pasta\"\n}" },
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}"
+          }
+        },
+        {
+          "name": "Toggle like",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/like"
+          }
+        },
+        {
+          "name": "Add view",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/view"
+          }
+        },
+        {
+          "name": "Add comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{jwt}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"text\": \"Great recipe!\"\n}" },
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/comment"
+          }
+        },
+        {
+          "name": "Delete comment",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/comment/{{commentId}}"
+          }
+        },
+        {
+          "name": "Get recipes by chef",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/chef/{{userId}}"
+          }
+        },
+        {
+          "name": "End session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}/end-session"
+          }
+        },
+        {
+          "name": "Delete recipe (chef)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}"
+          }
+        },
+        {
+          "name": "Delete recipe (admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminJwt}}" }],
+            "url": "{{baseUrl}}/api/recipes/admin/{{recipeId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Cooking",
+      "item": [
+        {
+          "name": "Start session",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/cooking/{{recipeId}}/start-session"
+          }
+        },
+        {
+          "name": "Get cooking steps history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/cooking/{{recipeId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Chat",
+      "item": [
+        {
+          "name": "Get chat history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/chat/{{recipeId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Notifications",
+      "item": [
+        {
+          "name": "List notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const list = pm.response.json();",
+                  "  if (Array.isArray(list) && list.length > 0 && list[0]._id) {",
+                  "    pm.environment.set('notificationId', list[0]._id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/notifications"
+          }
+        },
+        {
+          "name": "Mark notification read",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/notifications/read/{{notificationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Socket.IO (Postman Socket.IO tab)",
+      "description": "Socket.IO cannot use plain REST. In Postman:\n\n1. **New → Socket.IO Request**\n2. URL: `{{baseUrl}}` (e.g. http://localhost:5000)\n3. **Headers** tab: `Authorization` = `Bearer {{jwt}}`\n4. Click **Connect**\n5. Use **Events** tab to emit/listen\n\n### Auth\nSocket handshake reads `Authorization: Bearer <jwt>` from headers (same as REST).\n\n### Emit (chef token for cooking-step / cooking-timer)\n| Event | Payload |\n|-------|--------|\n| `join-recipe` | `\"<recipeId>\"` or `{ \"recipeId\": \"<id>\" }` |\n| `cooking-step` | `{ \"recipeId\": \"<id>\", \"step\": \"Chop onions\" }` |\n| `cooking-timer` | `{ \"recipeId\": \"<id>\", \"duration\": 120 }` |\n| `chat-message` | `{ \"recipeId\": \"<id>\", \"message\": \"Hello @chef\" }` |\n| `message` (Postman fallback) | `{ \"event\": \"cooking-step\", \"data\": { \"recipeId\": \"<id>\", \"step\": \"Stir\" } }` |\n\n### Listen\n| Event | Meaning |\n|-------|--------|\n| `room-users` | User IDs in room |\n| `step-update` | Chef broadcast step |\n| `timer-start` | Countdown started |\n| `chat-message` | New chat in room |\n| `new-notification` | Like, comment, mention, etc. |\n| `session-ended` | Chef ended live session |\n| `error` | Server-side error string |\n\n### Stage 0 socket checks\n1. Connect with user JWT → no auth error\n2. `join-recipe` after chef started session → `room-users` received\n3. Chef emits `cooking-step` → listener gets **one** `step-update` with `{ step, by, at }`\n4. `chat-message` with `@mention` → no crash (parseMentions fix)\n5. Optional: `message` fallback with `cooking-step` → same as direct emit",
+      "item": [
+        {
+          "name": "[Doc] Socket connect settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Open a Socket.IO request (not this REST call). URL={{baseUrl}}, Header Authorization=Bearer {{jwt}}"
+          }
+        },
+        {
+          "name": "[Emit] join-recipe",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Socket.IO emit:\n- Event: `join-recipe`\n- Message: `{{recipeId}}`\n\nPrerequisite: POST /api/cooking/{{recipeId}}/start-session as chef first."
+          }
+        },
+        {
+          "name": "[Emit] cooking-step (chef)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Socket.IO emit:\n- Event: `cooking-step`\n- Message: `{ \"recipeId\": \"{{recipeId}}\", \"step\": \"Add garlic\" }`\n\nExpect listeners: `step-update` with `{ step, by, at }`."
+          }
+        },
+        {
+          "name": "[Emit] cooking-timer (chef)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Socket.IO emit:\n- Event: `cooking-timer`\n- Message: `{ \"recipeId\": \"{{recipeId}}\", \"duration\": 60 }`"
+          }
+        },
+        {
+          "name": "[Emit] chat-message",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt}}" }],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Socket.IO emit:\n- Event: `chat-message`\n- Message: `{ \"recipeId\": \"{{recipeId}}\", \"message\": \"Hi everyone!\" }`"
+          }
+        },
+        {
+          "name": "[Emit] message fallback (Postman)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{chefJwt}}" }],
+            "url": "{{baseUrl}}/api/health",
+            "description": "Socket.IO emit:\n- Event: `message`\n- Message: `{ \"event\": \"cooking-step\", \"data\": { \"recipeId\": \"{{recipeId}}\", \"step\": \"Via fallback\" } }`\n\nVerifies broadcastCookingStep fix (no socket.io() crash)."
+          }
+        }
+      ]
+    }
+  ]
+}

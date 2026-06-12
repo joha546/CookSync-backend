@@ -3,11 +3,14 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
+const emailUser = process.env.EMAIL_USER || process.env.MAIL_USER;
+const emailPass = process.env.EMAIL_PASS || process.env.MAIL_PASS;
+
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
+        user: emailUser,
+        pass: emailPass,
     },
 });
 
@@ -32,7 +35,7 @@ exports.sendOTP = async (email, otp) => {
     `;
 
     await transporter.sendMail({
-        from: `"CookSync 🔥" <${process.env.MAIL_USER}>`,
+        from: `"CookSync 🔥" <${emailUser}>`,
         to: email,
         subject: "Your CookSync OTP Code",
         html: htmlTemplate,

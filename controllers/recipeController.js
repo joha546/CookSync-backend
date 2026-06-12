@@ -1,5 +1,7 @@
 const Recipe = require("../models/Recipe");
 const Notification = require("../models/Notification");
+const getRefId = require("../utils/getRefId");
+const { parseJsonField, ValidationError } = require("../utils/parseJsonField");
 
 exports.createRecipe = async (req, res) => {
     try {
@@ -29,8 +31,8 @@ exports.createRecipe = async (req, res) => {
         const recipe = new Recipe({
             title,
             description,
-            ingredients: JSON.parse(ingredients),
-            instructions: JSON.parse(instructions),
+            ingredients: parseJsonField(ingredients, "ingredients"),
+            instructions: parseJsonField(instructions, "instructions"),
             imageUrl: req.file?.path,
             servings,
             prepTime,
@@ -38,8 +40,8 @@ exports.createRecipe = async (req, res) => {
             coolTime,
             totalTime,
             category,
-            tags: JSON.parse(tags),
-            nutrition: JSON.parse(nutrition),
+            tags: parseJsonField(tags, "tags"),
+            nutrition: parseJsonField(nutrition, "nutrition"),
             chefId: req.user.id, // Always use authenticated userID.
         });
 
@@ -51,6 +53,9 @@ exports.createRecipe = async (req, res) => {
 
         res.status(201).json(recipe);
     } catch (error) {
+        if (error instanceof ValidationError) {
+            return res.status(400).json({ error: error.message });
+        }
         console.error(error);
         res.status(500).json({ error: "Failed to create recipe" });
     }
@@ -66,23 +71,44 @@ exports.getAllRecipes = async (req, res) => {
         query.tags = { $in: [diet] }; // tags must include the dietary label
     }
 
-    let sortOption = { createdAt: -1 }; // default: newest.
-
-    if (sortBy === "likes") {
-        sortOption = { "likes.length": -1 };
-    }
-
-    if (sortBy === "views") {
-        sortOption = { "views.length": -1 };
-    }
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
     try {
-        const recipes = await Recipe.find(query)
-            .sort(sortOption)
-            .skip((page - 1) * limit)
-            .limit(parseInt(limit))
-            .populate("likes.userId", "email")
-            .populate("comments.userId", "email");
+        let recipes;
+
+        if (sortBy === "likes" || sortBy === "views") {
+            const countField = sortBy === "likes" ? "likeCount" : "viewCount";
+            const arrayField = sortBy === "likes" ? "$likes" : "$views";
+
+            const aggregated = await Recipe.aggregate([
+                { $match: query },
+                { $addFields: { [countField]: { $size: arrayField } } },
+                { $sort: { [countField]: -1 } },
+                { $skip: skip },
+                { $limit: limitNum },
+            ]);
+
+            const ids = aggregated.map((r) => r._id);
+            const orderMap = new Map(ids.map((id, index) => [id.toString(), index]));
+
+            recipes = await Recipe.find({ _id: { $in: ids } })
+                .populate("likes.userId", "email")
+                .populate("comments.userId", "email");
+
+            recipes.sort(
+                (a, b) =>
+                    orderMap.get(a._id.toString()) - orderMap.get(b._id.toString())
+            );
+        } else {
+            recipes = await Recipe.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum)
+                .populate("likes.userId", "email")
+                .populate("comments.userId", "email");
+        }
 
         res.json(recipes);
     } catch (error) {
@@ -191,10 +217,12 @@ exports.toggleLike = async (req, res) => {
         recipe.likes.push({ userId });
         await recipe.save();
 
+        const chefId = getRefId(recipe.chefId);
+
         // Send notification to recipe owner (if not liking their own)
-        if (recipe.chefId && recipe.chefId._id.toString() !== userId) {
+        if (chefId && chefId.toString() !== userId) {
             const notif = await Notification.create({
-                user: recipe.chefId._id,
+                user: chefId,
                 message: `${req.user.email} liked your recipe "${recipe.title}"`,
                 link: `/recipes/${recipe._id}`,
                 type: "like",
@@ -207,7 +235,7 @@ exports.toggleLike = async (req, res) => {
             sockets.forEach((sock) => {
                 if (
                     sock.user &&
-                    sock.user._id.toString() === recipe.chefId._id.toString()
+                    sock.user._id.toString() === chefId.toString()
                 ) {
                     sock.emit("new-notification", {
                         type: "like",
@@ -257,14 +285,14 @@ exports.addView = async (req, res) => {
 exports.addComment = async (req, res) => {
     const { id } = req.params;
     const { text } = req.body;
-    const { userId } = req.user.id;
+    const userId = req.user.id;
 
     if (!text) {
         return res.status(400).json({ error: "Comment text is required" });
     }
 
     try {
-        const recipe = await Recipe.findById(id);
+        const recipe = await Recipe.findById(id).populate('chefId', 'email');
 
         if (!recipe) {
             return res.status(404).json({ error: "Recipe not found" });
@@ -273,10 +301,12 @@ exports.addComment = async (req, res) => {
         recipe.comments.push({ userId, text });
         await recipe.save();
 
+        const chefId = getRefId(recipe.chefId);
+
         // Notify recipe owner (if not commenting on own recipe)
-        if (recipe.chefId._id.toString() !== userId) {
+        if (chefId.toString() !== userId) {
             const notif = await Notification.create({
-                user: recipe.chefId._id,
+                user: chefId,
                 message: `${req.user.email} commented on your recipe "${recipe.title}"`,
                 link: `/recipes/${recipe._id}`,
                 type: "comment",
@@ -289,7 +319,7 @@ exports.addComment = async (req, res) => {
             sockets.forEach((sock) => {
                 if (
                     sock.user &&
-                    sock.user._id.toString() === recipe.chefId._id.toString()
+                    sock.user._id.toString() === chefId.toString()
                 ) {
                     sock.emit("new-notification", {
                         type: "comment",
@@ -303,7 +333,7 @@ exports.addComment = async (req, res) => {
 
         res.json({ message: "Comment added." });
     } catch (error) {
-        console.error("❌ addComment error:", error.message);
+        console.error("addComment error:", error.message);
         res.status(500).json({ error: "Failed to add comment" });
     }
 };
@@ -332,11 +362,11 @@ exports.deleteComment = async (req, res) => {
                 .json({ error: "Not authorized to delte this comment." });
         }
 
-        comment.remove();
+        recipe.comments.pull(commentId);
         await recipe.save();
         res.json({ message: "Comment deleted." });
     } catch (error) {
-        res.status(500).json({ error: "Failed to add comment" });
+        res.status(500).json({ error: "Failed to delete comment" });
     }
 };
 

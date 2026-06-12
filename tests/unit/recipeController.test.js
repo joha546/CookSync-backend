@@ -40,6 +40,23 @@ describe('Recipe Controller', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Only chefs can create recipes' });
     });
 
+    it('should return 400 for invalid JSON in ingredients', async () => {
+      req.body = {
+        title: 'Pizza',
+        ingredients: 'not-json',
+        instructions: JSON.stringify(['Step 1']),
+        tags: JSON.stringify(['vegan']),
+        nutrition: JSON.stringify({ calories: 200 }),
+      };
+
+      await createRecipe(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'ingredients must be valid JSON',
+      });
+    });
+
     it('should save recipe and emit socket event', async () => {
       req.body = {
         title: 'Pizza',
@@ -72,7 +89,7 @@ describe('Recipe Controller', () => {
   // getAllRecipes()
   // ============================
   describe('getAllRecipes()', () => {
-    it('should return filtered recipe list', async () => {
+    it('should return filtered recipe list sorted by likes', async () => {
       req.query = {
         diet: 'vegan',
         sortBy: 'likes',
@@ -80,13 +97,38 @@ describe('Recipe Controller', () => {
         limit: 2
       };
 
-      mockingoose(Recipe).toReturn([{ title: 'Vegan Pizza' }], 'find');
+      const aggregateSpy = jest
+        .spyOn(Recipe, 'aggregate')
+        .mockResolvedValue([{ _id: mockRecipeId }]);
+      mockingoose(Recipe).toReturn(
+        [{ _id: mockRecipeId, title: 'Vegan Pizza' }],
+        'find'
+      );
 
       await getAllRecipes(req, res);
 
-      expect(res.json).toHaveBeenCalledWith(expect.arrayContaining([
-        expect.objectContaining({ title: 'Vegan Pizza' })
-      ]));
+      expect(aggregateSpy).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ title: 'Vegan Pizza' }),
+        ])
+      );
+
+      aggregateSpy.mockRestore();
+    });
+
+    it('should return newest recipes by default', async () => {
+      req.query = { page: 1, limit: 10 };
+
+      mockingoose(Recipe).toReturn([{ title: 'Newest Pizza' }], 'find');
+
+      await getAllRecipes(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ title: 'Newest Pizza' }),
+        ])
+      );
     });
   });
 
@@ -293,23 +335,38 @@ describe('Recipe Controller - Additional Functions', () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
-    it('should add comment and send notification', async () => {
+    it('should add comment with correct userId and send notification', async () => {
       req.params = { id: mockRecipeId.toString() };
       req.body = { text: 'Nice recipe!' };
       req.user.email = 'user@example.com';
       req.user.id = mockUserId.toString();
 
-      mockingoose(Recipe).toReturn({
+      const chefId = new mongoose.Types.ObjectId();
+      const comments = [];
+      const saveMock = jest.fn().mockResolvedValue();
+      const recipeMock = {
         _id: mockRecipeId,
         title: 'Pasta',
-        chefId: { _id: new mongoose.Types.ObjectId() },
-        comments: [],
-        save: jest.fn()
-      }, 'findOne');
+        chefId,
+        comments,
+        save: saveMock,
+      };
+
+      const findByIdSpy = jest.spyOn(Recipe, 'findById').mockReturnValue({
+        populate: jest.fn().mockResolvedValue(recipeMock),
+      });
       mockingoose(Notification).toReturn({}, 'create');
 
       await addComment(req, res);
+
+      expect(comments[0]).toEqual({
+        userId: mockUserId.toString(),
+        text: 'Nice recipe!',
+      });
+      expect(saveMock).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith({ message: 'Comment added.' });
+
+      findByIdSpy.mockRestore();
     });
   });
 

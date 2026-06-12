@@ -1,6 +1,7 @@
 const ChatMessage = require('../models/ChatMessage');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const { parseMentionUsernames } = require('../utils/parseMentions');
 
 // Handle chat message send + store
 module.exports = function handleChatEvents(io, socket){
@@ -28,11 +29,9 @@ module.exports = function handleChatEvents(io, socket){
             io.to(recipeId).emit('chat-message', payload);
             console.log(`💬 Chat from ${socket.user.email} in ${recipeId}: ${message}`);
 
-            // Detect @mentions
-            const mentions = message.match(/@([a-zA-Z0-9._-]+)/g);
+            const usernames = parseMentionUsernames(message);
 
-            if(mentions){
-                const usernames = mentions.map(m => m.subString(1).toLowerCase());
+            if(usernames.length > 0){
 
                 const mentionedUsers = await User.find({
                     email: {$in: usernames.map(name => `${name}@cookysync.com`)}

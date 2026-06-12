@@ -3,3 +3,4 @@ node_modules/
 uploads/
 Postman Json/
 Testing-Doc.odt
+.cursor/
